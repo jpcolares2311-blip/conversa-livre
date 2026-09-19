@@ -1,0 +1,407 @@
+```html
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Chat com Voz</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f2f2f2;
+      display: flex;
+      justify-content: center;
+      min-height: 100vh;
+    }
+
+    .chat {
+      width: 100%;
+      max-width: 700px;
+      height: 100vh;
+      background: white;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 20px;
+      background: #111;
+      color: white;
+      text-align: center;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 22px;
+    }
+
+    #mensagens {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+    }
+
+    .mensagem {
+      margin-bottom: 15px;
+      padding: 12px 16px;
+      border-radius: 15px;
+      max-width: 85%;
+      line-height: 1.5;
+    }
+
+    .usuario {
+      background: #111;
+      color: white;
+      margin-left: auto;
+    }
+
+    .ia {
+      background: #eeeeee;
+      color: #111;
+      margin-right: auto;
+    }
+
+    .controles {
+      padding: 15px;
+      border-top: 1px solid #ddd;
+      display: flex;
+      gap: 10px;
+    }
+
+    #mensagem {
+      flex: 1;
+      padding: 14px;
+      border: 1px solid #ccc;
+      border-radius: 25px;
+      font-size: 16px;
+      outline: none;
+    }
+
+    button {
+      border: none;
+      cursor: pointer;
+    }
+
+    #enviar {
+      background: #111;
+      color: white;
+      padding: 0 20px;
+      border-radius: 25px;
+    }
+
+    #microfone {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: #111;
+      color: white;
+      font-size: 22px;
+    }
+
+    #microfone.ouvindo {
+      background: red;
+      animation: pulsar 1s infinite;
+    }
+
+    @keyframes pulsar {
+      50% {
+        transform: scale(1.08);
+      }
+    }
+
+    #status {
+      text-align: center;
+      font-size: 13px;
+      color: #777;
+      padding-bottom: 8px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="chat">
+
+    <header>
+      <h1>🤖 Assistente de Voz</h1>
+    </header>
+
+    <div id="mensagens"></div>
+
+    <div id="status">
+      Clique no 🎤 e fale
+    </div>
+
+    <div class="controles">
+
+      <input
+        id="mensagem"
+        type="text"
+        placeholder="Digite ou fale..."
+        autocomplete="off"
+      >
+
+      <button id="microfone" title="Falar">
+        🎤
+      </button>
+
+      <button id="enviar">
+        Enviar
+      </button>
+
+    </div>
+
+  </div>
+
+
+  <script>
+
+    const mensagemInput = document.getElementById("mensagem");
+    const enviarButton = document.getElementById("enviar");
+    const microfoneButton = document.getElementById("microfone");
+    const mensagens = document.getElementById("mensagens");
+    const status = document.getElementById("status");
+
+
+    // ==========================================
+    // MOSTRAR MENSAGEM NO CHAT
+    // ==========================================
+
+    function adicionarMensagem(texto, tipo) {
+
+      const div = document.createElement("div");
+
+      div.classList.add("mensagem", tipo);
+
+      div.textContent = texto;
+
+      mensagens.appendChild(div);
+
+      mensagens.scrollTop = mensagens.scrollHeight;
+    }
+
+
+    // ==========================================
+    // ENVIAR MENSAGEM PARA A IA
+    // ==========================================
+
+    async function enviarMensagem() {
+
+      const texto = mensagemInput.value.trim();
+
+      if (!texto) {
+        return;
+      }
+
+      adicionarMensagem(texto, "usuario");
+
+      mensagemInput.value = "";
+
+      status.textContent = "🤔 A IA está pensando...";
+
+      try {
+
+        const resposta = await fetch("/chat", {
+
+          method: "POST",
+
+          headers: {
+            "Content-Type": "application/json"
+          },
+
+          body: JSON.stringify({
+            mensagem: texto
+          })
+
+        });
+
+
+        const dados = await resposta.json();
+
+
+        if (!resposta.ok) {
+          throw new Error(dados.erro || "Erro no servidor");
+        }
+
+
+        adicionarMensagem(dados.resposta, "ia");
+
+        status.textContent = "🔊 Reproduzindo resposta...";
+
+
+        // ==========================================
+        // TOCAR RESPOSTA EM ÁUDIO
+        // ==========================================
+
+        if (dados.audio) {
+
+          const audioBytes = Uint8Array.from(
+            atob(dados.audio),
+            c => c.charCodeAt(0)
+          );
+
+          const blob = new Blob(
+            [audioBytes],
+            { type: "audio/mpeg" }
+          );
+
+          const url = URL.createObjectURL(blob);
+
+          const audio = new Audio(url);
+
+          audio.onended = function() {
+            URL.revokeObjectURL(url);
+            status.textContent = "Clique no 🎤 e fale";
+          };
+
+          await audio.play();
+
+        } else {
+
+          status.textContent = "Clique no 🎤 e fale";
+
+        }
+
+
+      } catch (erro) {
+
+        console.error(erro);
+
+        adicionarMensagem(
+          "❌ Não consegui falar com a IA. Verifique se o servidor está funcionando.",
+          "ia"
+        );
+
+        status.textContent = "Erro";
+
+      }
+
+    }
+
+
+    enviarButton.addEventListener(
+      "click",
+      enviarMensagem
+    );
+
+
+    mensagemInput.addEventListener(
+      "keydown",
+      function(evento) {
+
+        if (evento.key === "Enter") {
+          enviarMensagem();
+        }
+
+      }
+    );
+
+
+    // ==========================================
+    // MICROFONE
+    // ==========================================
+
+    const SpeechRecognition =
+      window.SpeechRecognition ||
+      window.webkitSpeechRecognition;
+
+
+    if (!SpeechRecognition) {
+
+      microfoneButton.disabled = true;
+
+      status.textContent =
+        "Seu navegador não suporta reconhecimento de voz.";
+
+    } else {
+
+      const reconhecimento = new SpeechRecognition();
+
+      reconhecimento.lang = "pt-BR";
+
+      reconhecimento.continuous = false;
+
+      reconhecimento.interimResults = false;
+
+
+      reconhecimento.onstart = function() {
+
+        microfoneButton.classList.add("ouvindo");
+
+        status.textContent =
+          "🔴 Estou ouvindo...";
+
+      };
+
+
+      reconhecimento.onresult = function(evento) {
+
+        const texto =
+          evento.results[0][0].transcript;
+
+        mensagemInput.value = texto;
+
+        microfoneButton.classList.remove("ouvindo");
+
+        status.textContent =
+          "Mensagem reconhecida!";
+
+        // Envia automaticamente para a IA
+        enviarMensagem();
+
+      };
+
+
+      reconhecimento.onerror = function(evento) {
+
+        console.error(
+          "Erro do microfone:",
+          evento.error
+        );
+
+        microfoneButton.classList.remove("ouvindo");
+
+        status.textContent =
+          "❌ Erro no microfone: " + evento.error;
+
+      };
+
+
+      reconhecimento.onend = function() {
+
+        microfoneButton.classList.remove("ouvindo");
+
+      };
+
+
+      microfoneButton.addEventListener(
+        "click",
+        function() {
+
+          try {
+
+            reconhecimento.start();
+
+          } catch (erro) {
+
+            console.log(erro);
+
+          }
+
+        }
+      );
+
+    }
+
+  </script>
+
+</body>
+</html>
+```
